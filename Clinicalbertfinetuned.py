@@ -246,3 +246,98 @@ model.save_pretrained(model_path)
 tokenizer.save_pretrained(model_path)
 
 
+
+Changes:
+TypeError: new(): invalid
+data
+type
+'str'
+Gemini
+Hypothesis:
+The
+error
+occurs in the
+__getitem__
+method
+of
+the
+ICD10Dataset
+
+
+class . Specifically, the line label = self.labels[idx] is causing the error.The error message TypeError: new(): invalid
+
+
+data
+type
+'str'
+suggests
+that
+the
+labels
+list
+contains
+strings,
+while the torch.tensor() function expects a numeric input.
+
+Suggested
+Changes:
+Convert
+the
+labels
+to
+integers:
+
+from sklearn.preprocessing import LabelEncoder
+
+# Create a LabelEncoder object
+le = LabelEncoder()
+
+# Fit the LabelEncoder on the unique ICD codes
+le.fit(set(icd_codes))
+
+# Transform the labels using the LabelEncoder
+train_labels = le.transform(train_labels)
+val_labels = le.transform(val_labels)
+Use
+code
+with caution
+    Modify
+    the
+    __getitem__
+    method
+    to
+    handle
+    the
+    integer
+    labels:
+
+
+def __getitem__(self, idx):
+    description = self.descriptions[idx]
+    label = self.labels[idx]
+    encoding = self.tokenizer(description, max_length=self.max_length, padding='max_length', truncation=True,
+                              return_tensors='pt')
+    return {'input_ids': encoding['input_ids'].squeeze(), 'attention_mask': encoding['attention_mask'].squeeze(),
+            'label': torch.tensor(label)}
+
+
+Use
+code
+with caution
+    Rerun
+    the
+    training
+    script.
+These
+changes
+should
+resolve
+the
+TypeError and allow
+the
+training
+script
+to
+run
+successfully.
+
