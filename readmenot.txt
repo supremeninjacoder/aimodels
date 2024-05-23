@@ -1310,3 +1310,98 @@ Tokenization: Converts the text descriptions into token IDs and attention masks.
 Model Configuration: Loads the model with LoRa configuration and prepares it for inference.
 Inference: Uses a multi-threaded approach to run inference on the dataset, splitting it into subsets for parallel processing.
 By following these steps, you can fine-tune a ClinicalBERT model, and implement and run inference using Siamese and Prototypical Networks for ICD-10 code prediction. Adjustments may be necessary based on the specific dataset and requirements.
+
+
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+
+# Step 1: Data Preparation
+icd_data = pd.read_excel('icd10_descriptions.xlsx')
+descriptions = icd_data['Description'].tolist()
+icd_codes = icd_data['ICD-10 Code'].tolist()
+
+# Step 2: Model Training
+model_name = 'bert-base-uncased'
+model = SentenceTransformer(model_name)
+embeddings = model.encode(descriptions)
+
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from transformers import BertTokenizer, BertForSequenceClassification, AdamW
+import torch
+from torch.utils.data import TensorDataset, DataLoader
+from tqdm import tqdm
+
+# Step 1: Data Preparation
+icd_data = pd.read_excel('icd10_descriptions.xlsx')
+descriptions = icd_data['Description'].tolist()
+icd_codes = icd_data['ICD-10 Code'].tolist()
+
+# Preprocess text and encode labels
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+encoded_data = tokenizer(descriptions, padding=True, truncation=True, return_tensors='pt')
+labels = torch.tensor(icd_codes)
+
+# Split data into training and validation sets
+train_inputs, val_inputs, train_labels, val_labels = train_test_split(encoded_data, labels, test_size=0.2, random_state=42)
+
+# Step 2: Model Fine-Tuning
+model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=len(set(icd_codes)))
+optimizer = AdamW(model.parameters(), lr=5e-5)
+train_dataset = TensorDataset(train_inputs.input_ids, train_inputs.attention_mask, train_labels)
+train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# Training Loop
+num_epochs = 3
+for epoch in range(num_epochs):
+    model.train()
+    total_loss = 0
+    for batch in tqdm(train_loader, desc="Epoch " + str(epoch)):
+        batch = tuple(t.to(device) for t in batch)
+        inputs = {'input_ids': batch[0], 'attention_mask': batch[1], 'labels': batch[2]}
+        optimizer.zero_grad()
+        outputs = model(**inputs)
+        loss = outputs.loss
+        total_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+
+    avg_train_loss = total_loss / len(train_loader)
+    print("Average training loss:", avg_train_loss)
+
+# Step 3: Embedding Query (similar to previous steps)
+
+# Step 4: Nearest Neighbor Search (similar to previous steps)
+
+# Step 5: Output ICD-10 Codes (similar to previous steps)
+
+# Save the fine-tuned model
+torch.save(model.state_dict(), 'fine_tuned_model.pth')
+
+# Load the fine-tuned model
+model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=len(set(icd_codes)))
+model.load_state_dict(torch.load('fine_tuned_model.pth'))
+
+
+
+# Step 3: Embedding Query
+query = "description query from patient file"
+query_embedding = model.encode([query])[0]
+
+# Step 4: Nearest Neighbor Search
+similarity_scores = cosine_similarity([query_embedding], embeddings)[0]
+
+# Step 5: Output ICD-10 Codes
+top_indices = similarity_scores.argsort()[-5:][::-1]
+top_icd_codes = [icd_codes[idx] for idx in top_indices]
+
+print("Top 5 matching ICD-10 codes:")
+for code in top_icd_codes:
+    print(code)
+
+
