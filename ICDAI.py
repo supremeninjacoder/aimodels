@@ -166,3 +166,74 @@ for i, match in enumerate(best_matches):
     print(f"Patient note: {patient_notes[i]}")
     print(f"Best matching ICD-10 description: {icd10_descriptions[match]}")
     print(f"ICD-10 code: {icd10_codes[match]}")
+
+
+To further speed up training and adjust the learning rate, we can utilize the following approaches:
+
+1. **Learning Rate Scheduling**: Implement a learning rate scheduler to adjust the learning rate dynamically during training. This can help converge faster to an optimal solution.
+2. **Gradient Accumulation**: Use gradient accumulation to simulate larger batch sizes without increasing memory usage. This can allow training with larger effective batch sizes and potentially faster convergence.
+3. **Mixed Precision Training**: Utilize mixed precision training, where some parts of the model are calculated in lower precision (e.g., half-precision floating-point format) to speed up computations while maintaining accuracy.
+4. **Parallelism Optimization**: Ensure that your model and data processing are optimized for multi-GPU training. This includes efficient data loading, distributed training strategies, and model parallelism if applicable.
+
+Here's how you can implement these approaches:
+
+```python
+from transformers import TrainingArguments, Trainer
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torch
+
+# Define your TrainingArguments
+training_args = TrainingArguments(
+    output_dir='./results',
+    num_train_epochs=1,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    logging_dir='./logs',
+    logging_steps=100,
+    save_steps=500,
+    evaluation_strategy="steps",
+    eval_steps=500,
+    save_total_limit=1,
+)
+
+# Define a learning rate scheduler
+lr_scheduler = ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.1,
+    patience=3,
+    verbose=True,
+    threshold=0.0001,
+    threshold_mode='rel',
+    cooldown=0,
+    min_lr=0,
+    eps=1e-08
+)
+
+# Mixed Precision Training setup
+scaler = torch.cuda.amp.GradScaler()
+
+# Create Trainer instance
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    data_collator=data_collator,
+    train_dataset=train_dataset,
+    eval_dataset=val_dataset,
+    compute_metrics=compute_metrics,
+    optimizers=(optimizer, lr_scheduler),
+    gradient_accumulation_steps=4,  # Accumulate gradients over 4 steps
+    fp16=True,  # Enable mixed precision training
+)
+
+# Train the model
+trainer.train()
+```
+
+In this setup:
+- We define a `ReduceLROnPlateau` scheduler to reduce the learning rate dynamically based on a validation metric (e.g., loss).
+- We enable mixed precision training by setting `fp16=True` and use the `GradScaler` from PyTorch's Automatic Mixed Precision (AMP) library to handle automatic scaling of gradients.
+- We accumulate gradients over 4 steps (`gradient_accumulation_steps=4`) to simulate larger batch sizes.
+- Ensure that your model and optimizer are compatible with mixed precision training (`model.to(dtype=torch.float16)` and `optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)`).
+
+These adjustments should significantly speed up the training process while maintaining or even improving the model's performance. Adjust the parameters as needed based on your specific requirements and available computational resources.
